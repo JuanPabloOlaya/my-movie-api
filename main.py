@@ -1,12 +1,15 @@
 from http import HTTPStatus
 import json
-from fastapi import Body, FastAPI, Path, Query
+from typing import Any
+from fastapi import Body, Depends, FastAPI, Path, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse
-from exceptions import ItemAlreadyExistsException, ItemNotFoundException
+from exceptions import ItemAlreadyExistsException, ItemNotFoundException, LoginException
+from jwt_manager import create_token
+from middlewares import JWTBearer
 
 from models import Movie
-from requestss import CreateMovieRequest, UpdateMovieRequest
+from requestss import CreateMovieRequest, LoginRequest, UpdateMovieRequest
 
 app: FastAPI = FastAPI()
 
@@ -38,7 +41,22 @@ def message() -> HTMLResponse:
     return HTMLResponse("<h1>Hello world!</h1>")
 
 
-@app.get("/movies", tags=["Movies"], response_model=list[Movie])
+@app.post("/login", tags=["Auth"])
+def login(request: LoginRequest) -> Any:
+    if (request.email == "mail@mail.com" and request.password == "123456"):
+        token: str = create_token(request.__dict__)
+
+        return JSONResponse(status_code=200, content=token)
+
+    raise LoginException()
+
+
+@app.get(
+    "/movies",
+    tags=["Movies"],
+    response_model=list[Movie],
+    dependencies=[Depends(JWTBearer())]
+)
 def get_movies(
     category: str = Query(
         default=None,
