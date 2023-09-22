@@ -1,7 +1,8 @@
 from http import HTTPStatus
 import json
-from typing import Any
+from typing import Any, Tuple
 from fastapi import Body, Depends, FastAPI, Path, Query
+from sqlalchemy import Select, select
 from config.database import Session, engine, Base
 from models.movie import Movie as MovieModel
 from fastapi.encoders import jsonable_encoder
@@ -72,69 +73,37 @@ def get_movies(
         ge=1000
     )
 ) -> JSONResponse:
-    if (not category and not year):
+    filters: dict = {}
 
-        return JSONResponse(content=jsonable_encoder(movies))
+    if (category):
+        filters["category"] = category
 
-    response: list[MovieDto] = []
+    if (year):
+        filters["year"] = year
 
-    if (not category and year):
-        response = list(
-            filter(
-                lambda movie: movie.year == year, movies
-            )
-        )
+    with Session() as db:
+        statement: Select[Tuple] = select(MovieModel).filter_by(**filters)
 
-        return JSONResponse(
-            content=jsonable_encoder(response)
-        )
-
-    if (not year and category):
-        response = list(
-            filter(
-                lambda movie: movie.category == category,
-                movies
-            )
-        )
+        response = db.scalars(statement).all()
 
         return JSONResponse(
             content=jsonable_encoder(response)
         )
-
-    response = list(
-        filter(
-            lambda movie: movie.category == category and movie.year == str(
-                year),
-            movies
-        )
-    )
-
-    return JSONResponse(
-        content=jsonable_encoder(response)
-    )
 
 
 @app.get("/movies/{id}", tags=["Movies"], response_model=MovieDto)
-def get_movie(id: int = Path(ge=1, le=2000)) -> JSONResponse:
-    movie: MovieDto = None
-    iterator: int = 0
+def get_movie(id: int = Path(ge=1)) -> JSONResponse:
+    with Session() as db:
+        movie: MovieModel = db.get(MovieModel, id)
 
-    while not movie and iterator < len(movies):
-        current_movie: MovieDto = movies[iterator]
+        if (not movie):
+            raise ItemNotFoundException(
+                f"Movie with id <{id}> does not exists"
+            )
 
-        if (current_movie.id == id):
-            movie = current_movie
+        response = jsonable_encoder(movie)
 
-        iterator += 1
-
-    if (not movie):
-        raise ItemNotFoundException(
-            detail=f"Movie with ID <{id}> does not exists"
-        )
-
-    response = jsonable_encoder(movie)
-
-    return JSONResponse(content=response)
+        return JSONResponse(content=response)
 
 
 @app.post(
