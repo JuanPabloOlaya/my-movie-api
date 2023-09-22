@@ -2,13 +2,15 @@ from http import HTTPStatus
 import json
 from typing import Any
 from fastapi import Body, Depends, FastAPI, Path, Query
+from config.database import Session, engine, Base
+from models.movie import Movie as MovieModel
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse
 from exceptions import ItemAlreadyExistsException, ItemNotFoundException, LoginException
 from jwt_manager import create_token
 from middlewares import JWTBearer
 
-from models import Movie
+from dtos import MovieDto
 from requestss import CreateMovieRequest, LoginRequest, UpdateMovieRequest
 
 app: FastAPI = FastAPI()
@@ -16,8 +18,10 @@ app: FastAPI = FastAPI()
 app.title = "My Movie API"
 app.version = "0.0.1"
 
-movies: list[Movie] = [
-    Movie(
+Base.metadata.create_all(bind=engine)
+
+movies: list[MovieDto] = [
+    MovieDto(
         id=1,
         title='Avatar',
         overview="En un exuberante planeta llamado Pandora viven los Na'vi, seres que ...",
@@ -25,7 +29,7 @@ movies: list[Movie] = [
         rating=7.8,
         category='Acción'
     ),
-    Movie(
+    MovieDto(
         id=2,
         title='Avatar 2',
         overview="En un exuberante planeta llamado Pandora viven los Na'vi, seres que ...",
@@ -54,7 +58,7 @@ def login(request: LoginRequest) -> Any:
 @app.get(
     "/movies",
     tags=["Movies"],
-    response_model=list[Movie],
+    response_model=list[MovieDto],
     dependencies=[Depends(JWTBearer())]
 )
 def get_movies(
@@ -72,7 +76,7 @@ def get_movies(
 
         return JSONResponse(content=jsonable_encoder(movies))
 
-    response: list[Movie] = []
+    response: list[MovieDto] = []
 
     if (not category and year):
         response = list(
@@ -110,13 +114,13 @@ def get_movies(
     )
 
 
-@app.get("/movies/{id}", tags=["Movies"], response_model=Movie)
+@app.get("/movies/{id}", tags=["Movies"], response_model=MovieDto)
 def get_movie(id: int = Path(ge=1, le=2000)) -> JSONResponse:
-    movie: Movie = None
+    movie: MovieDto = None
     iterator: int = 0
 
     while not movie and iterator < len(movies):
-        current_movie: Movie = movies[iterator]
+        current_movie: MovieDto = movies[iterator]
 
         if (current_movie.id == id):
             movie = current_movie
@@ -136,28 +140,18 @@ def get_movie(id: int = Path(ge=1, le=2000)) -> JSONResponse:
 @app.post(
     "/movies",
     tags=["Movies"],
-    response_model=Movie,
+    response_model=MovieDto,
     status_code=HTTPStatus.CREATED
 )
 def create_movie(request: CreateMovieRequest = Body()) -> JSONResponse:
-    coincidences: list[Movie] = list(
-        filter(lambda movie: movie.id == request.id, movies))
+    db = Session()
 
-    if (len(coincidences)):
-        raise ItemAlreadyExistsException(
-            detail=f"Movie with ID <{id}> already exists"
-        )
-
-    movie: Movie = Movie(
-        id=request.id,
-        title=request.title,
-        overview=request.overview,
-        year=request.year,
-        rating=request.rating,
-        category=request.category
+    movie: MovieModel = MovieModel(
+        **request.model_dump()
     )
 
-    movies.append(movie)
+    db.add(movie)
+    db.commit()
 
     response = jsonable_encoder(movie)
 
@@ -166,7 +160,7 @@ def create_movie(request: CreateMovieRequest = Body()) -> JSONResponse:
 
 @app.delete("/movies/{id}", tags=["Movies"])
 def delete_movie(id: int) -> None:
-    movie: Movie = None
+    movie: MovieDto = None
 
     for m in movies:
         if (m.id == id):
@@ -197,7 +191,7 @@ def update_movie(id: int, request: UpdateMovieRequest = Body()) -> JSONResponse:
             detail=f"Movie with ID <{id}> was not found"
         )
 
-    movies[movieIndex] = Movie(
+    movies[movieIndex] = MovieDto(
         id=id,
         title=request.title,
         overview=request.overview,
