@@ -2,9 +2,9 @@ from http import HTTPStatus
 import json
 from typing import Any, Tuple
 from fastapi import Body, Depends, FastAPI, Path, Query
-from sqlalchemy import Select, select
-from config.database import Session, engine, Base
+from sqlmodel import select
 from models.movie import Movie as MovieModel
+from config.database import create_db_and_tables, Connection
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse
 from exceptions import ItemAlreadyExistsException, ItemNotFoundException, LoginException
@@ -19,31 +19,32 @@ app: FastAPI = FastAPI()
 app.title = "My Movie API"
 app.version = "0.0.1"
 
-Base.metadata.create_all(bind=engine)
-
-movies: list[MovieDto] = [
-    MovieDto(
-        id=1,
-        title='Avatar',
-        overview="En un exuberante planeta llamado Pandora viven los Na'vi, seres que ...",
-        year='2009',
-        rating=7.8,
-        category='Acción'
-    ),
-    MovieDto(
-        id=2,
-        title='Avatar 2',
-        overview="En un exuberante planeta llamado Pandora viven los Na'vi, seres que ...",
-        year='2022',
-        rating=10.0,
-        category='Ciencia Ficción'
-    )
-]
+create_db_and_tables()
 
 
 @app.get("/", tags=["Home"], response_class=HTMLResponse)
 def message() -> HTMLResponse:
     return HTMLResponse("<h1>Hello world!</h1>")
+
+
+@app.post(
+    "/movies",
+    tags=["Movies"],
+    response_model=MovieDto,
+    status_code=HTTPStatus.CREATED
+)
+def create_movie(request: CreateMovieRequest = Body()) -> JSONResponse:
+    with Connection as db:
+        movie: MovieModel = MovieModel(
+            **request.dict()
+        )
+
+        db.add(movie)
+        db.commit()
+
+        response = jsonable_encoder(request)
+
+        return JSONResponse(content=response)
 
 
 @app.post("/login", tags=["Auth"])
@@ -81,10 +82,10 @@ def get_movies(
     if (year):
         filters["year"] = year
 
-    with Session() as db:
-        statement: Select[Tuple] = select(MovieModel).filter_by(**filters)
+    with Connection as db:
+        statement = select(MovieModel).filter_by(**filters)
 
-        response = db.scalars(statement).all()
+        response = db.exec(statement).all()
 
         return JSONResponse(
             content=jsonable_encoder(response)
@@ -93,7 +94,7 @@ def get_movies(
 
 @app.get("/movies/{id}", tags=["Movies"], response_model=MovieDto)
 def get_movie(id: int = Path(ge=1)) -> JSONResponse:
-    with Session() as db:
+    with Connection as db:
         movie: MovieModel = db.get(MovieModel, id)
 
         if (not movie):
@@ -106,30 +107,9 @@ def get_movie(id: int = Path(ge=1)) -> JSONResponse:
         return JSONResponse(content=response)
 
 
-@app.post(
-    "/movies",
-    tags=["Movies"],
-    response_model=MovieDto,
-    status_code=HTTPStatus.CREATED
-)
-def create_movie(request: CreateMovieRequest = Body()) -> JSONResponse:
-    db = Session()
-
-    movie: MovieModel = MovieModel(
-        **request.model_dump()
-    )
-
-    db.add(movie)
-    db.commit()
-
-    response = jsonable_encoder(movie)
-
-    return JSONResponse(content=response)
-
-
 @app.delete("/movies/{id}", tags=["Movies"])
 def delete_movie(id: int) -> None:
-    with Session() as db:
+    with Connection as db:
         movie: MovieModel = db.get(MovieModel, id)
 
         if not movie:
@@ -144,7 +124,7 @@ def delete_movie(id: int) -> None:
 
 @app.put("/movies/{id}", tags=["Movies"], response_model=MovieDto)
 def update_movie(id: int, request: UpdateMovieRequest = Body()) -> JSONResponse:
-    with Session() as db:
+    with Connection as db:
         movie: MovieModel = db.get(MovieModel, id)
 
         if not movie:
@@ -160,6 +140,7 @@ def update_movie(id: int, request: UpdateMovieRequest = Body()) -> JSONResponse:
 
         db.add(movie)
         db.commit()
+        db.refresh(movie)
 
         response = jsonable_encoder(movie)
 

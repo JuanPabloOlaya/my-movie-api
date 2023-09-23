@@ -1,13 +1,12 @@
-from sqlalchemy import Column, Float, Integer, String
-from config.database import Base
+from sqlmodel import Field, SQLModel
 
 
-class Movie(Base):
+class Movie(SQLModel, table=True):
     __tablename__: str = "movies"
 
-    id = Column(Integer, primary_key=True)
-    title = Column(String)
-    overview = Column(String)
-    year = Column(Integer)
-    rating = Column(Float)
-    category = Column(String)
+    id: int = Field(default=None, primary_key=True)
+    title: str
+    overview: str
+    year: int
+    rating: float
+    category: str
