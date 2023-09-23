@@ -129,46 +129,38 @@ def create_movie(request: CreateMovieRequest = Body()) -> JSONResponse:
 
 @app.delete("/movies/{id}", tags=["Movies"])
 def delete_movie(id: int) -> None:
-    movie: MovieDto = None
+    with Session() as db:
+        movie: MovieModel = db.get(MovieModel, id)
 
-    for m in movies:
-        if (m.id == id):
-            movie = m
+        if not movie:
+            raise ItemNotFoundException(
+                f"The movie with ID <{id}> does not exists"
+            )
 
-            break
+        db.delete(movie)
 
-    if (not movie):
-        raise ItemNotFoundException(
-            detail=f"Movie with ID <{id}> was not found"
-        )
-
-    movies.remove(movie)
+        db.commit()
 
 
-@app.put("/movies/{id}", tags=["Movies"])
+@app.put("/movies/{id}", tags=["Movies"], response_model=MovieDto)
 def update_movie(id: int, request: UpdateMovieRequest = Body()) -> JSONResponse:
-    movieIndex: int = None
+    with Session() as db:
+        movie: MovieModel = db.get(MovieModel, id)
 
-    for index, m in enumerate(movies):
-        if (m.id == id):
-            movieIndex = index
+        if not movie:
+            raise ItemNotFoundException(
+                f"The movie with ID <{id}> does not exists"
+            )
 
-            break
+        movie.category = request.category
+        movie.overview = request.overview
+        movie.rating = request.rating
+        movie.title = request.title
+        movie.year = request.year
 
-    if movieIndex is None:
-        raise ItemNotFoundException(
-            detail=f"Movie with ID <{id}> was not found"
-        )
+        db.add(movie)
+        db.commit()
 
-    movies[movieIndex] = MovieDto(
-        id=id,
-        title=request.title,
-        overview=request.overview,
-        year=request.year,
-        rating=request.rating,
-        category=request.category
-    )
+        response = jsonable_encoder(movie)
 
-    response = jsonable_encoder(movies[movieIndex])
-
-    return JSONResponse(content=response)
+        return JSONResponse(content=response)
