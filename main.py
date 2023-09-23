@@ -1,6 +1,5 @@
 from http import HTTPStatus
-import json
-from typing import Any, Tuple
+from typing import Any
 from fastapi import Body, Depends, FastAPI, Path, Query
 from sqlmodel import select
 from models.movie import Movie as MovieModel
@@ -10,7 +9,6 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from exceptions import ItemAlreadyExistsException, ItemNotFoundException, LoginException
 from jwt_manager import create_token
 from middlewares import JWTBearer
-
 from dtos import MovieDto
 from requestss import CreateMovieRequest, LoginRequest, UpdateMovieRequest
 
@@ -35,6 +33,13 @@ def message() -> HTMLResponse:
 )
 def create_movie(request: CreateMovieRequest = Body()) -> JSONResponse:
     with Connection as db:
+        movie: MovieModel = db.get(MovieModel, request.id)
+
+        if (movie):
+            raise ItemAlreadyExistsException(
+                f"The movie with id <{request.id}> already exists"
+            )
+
         movie: MovieModel = MovieModel(
             **request.dict()
         )
