@@ -16,8 +16,3 @@ class UpdateMovieRequest(BaseModel):
     year: str = Field(pattern="^[0-9]{4}$")
     rating: float = Field(ge=0.0, le=10.0)
     category: str = Field(max_length=30)
-
-
-class LoginRequest(BaseModel):
-    email: str
-    password: str
