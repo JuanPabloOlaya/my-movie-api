@@ -2,13 +2,14 @@ from http import HTTPStatus
 from typing import Any
 from fastapi import Body, Depends, FastAPI, Path, Query
 from sqlmodel import select
+from middlewares.jwt_bearer import JWTBearer
+from middlewares.error_handler import ErrorHandler
 from models.movie import Movie as MovieModel
 from config.database import create_db_and_tables, Connection
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse
 from exceptions import ItemAlreadyExistsException, ItemNotFoundException, LoginException
 from jwt_manager import create_token
-from middlewares import JWTBearer
 from dtos import MovieDto
 from requestss import CreateMovieRequest, LoginRequest, UpdateMovieRequest
 
@@ -16,6 +17,8 @@ app: FastAPI = FastAPI()
 
 app.title = "My Movie API"
 app.version = "0.0.1"
+
+app.add_middleware(ErrorHandler)
 
 create_db_and_tables()
 
