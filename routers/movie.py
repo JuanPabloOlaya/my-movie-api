@@ -1,5 +1,5 @@
 from http import HTTPStatus
-from fastapi import APIRouter, Body, Depends, Path, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlmodel import select
@@ -9,6 +9,7 @@ from exceptions.common import ItemAlreadyExistsException, ItemNotFoundException
 from middlewares.jwt_bearer import JWTBearer
 from models.movie import Movie
 from requests.movie import CreateMovieRequest, UpdateMovieRequest
+from services.movie import MovieService
 
 movie_router = APIRouter()
 
@@ -20,24 +21,22 @@ movie_router = APIRouter()
     status_code=HTTPStatus.CREATED
 )
 def create_movie(request: CreateMovieRequest = Body()) -> JSONResponse:
-    with Connection as db:
-        movie: Movie = db.get(Movie, request.id)
+    try:
+        with Connection as db:
+            data: MovieDto = MovieDto(**request.dict())
 
-        if (movie):
-            raise ItemAlreadyExistsException(
-                f"The movie with id <{request.id}> already exists"
-            )
+            created: MovieDto = MovieService(db=db).create_movie(data=data)
 
-        movie: Movie = Movie(
-            **request.dict()
+            response = jsonable_encoder(created)
+
+            return JSONResponse(content=response)
+    except ItemAlreadyExistsException as ex:
+        raise HTTPException(
+            status_code=HTTPStatus.PRECONDITION_FAILED,
+            detail=ex.args[0]
         )
-
-        db.add(movie)
-        db.commit()
-
-        response = jsonable_encoder(request)
-
-        return JSONResponse(content=response)
+    except Exception:
+        raise
 
 
 @movie_router.get(
@@ -57,18 +56,8 @@ def get_movies(
         ge=1000
     )
 ) -> JSONResponse:
-    filters: dict = {}
-
-    if (category):
-        filters["category"] = category
-
-    if (year):
-        filters["year"] = year
-
     with Connection as db:
-        statement = select(Movie).filter_by(**filters)
-
-        response = db.exec(statement).all()
+        response = MovieService(db=db).get_movies(category=category, year=year)
 
         return JSONResponse(
             content=jsonable_encoder(response)
@@ -77,54 +66,53 @@ def get_movies(
 
 @movie_router.get("/movies/{id}", tags=["Movies"], response_model=MovieDto)
 def get_movie(id: int = Path(ge=1)) -> JSONResponse:
-    with Connection as db:
-        movie: Movie = db.get(Movie, id)
+    try:
+        with Connection as db:
+            movie: Movie = MovieService(db=db).get_movie(movie_id=id)
 
-        if (not movie):
-            raise ItemNotFoundException(
-                f"Movie with id <{id}> does not exists"
-            )
+            response = jsonable_encoder(movie)
 
-        response = jsonable_encoder(movie)
-
-        return JSONResponse(content=response)
+            return JSONResponse(content=response)
+    except ItemNotFoundException as ex:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail=ex.args[0]
+        )
+    except Exception:
+        raise
 
 
 @movie_router.delete("/movies/{id}", tags=["Movies"])
 def delete_movie(id: int) -> None:
-    with Connection as db:
-        movie: Movie = db.get(Movie, id)
-
-        if not movie:
-            raise ItemNotFoundException(
-                f"The movie with ID <{id}> does not exists"
-            )
-
-        db.delete(movie)
-
-        db.commit()
+    try:
+        with Connection as db:
+            MovieService(db=db).delete_movie(id)
+    except ItemNotFoundException as ex:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail=ex.args[0]
+        )
+    except Exception:
+        raise
 
 
 @movie_router.put("/movies/{id}", tags=["Movies"], response_model=MovieDto)
 def update_movie(id: int, request: UpdateMovieRequest = Body()) -> JSONResponse:
-    with Connection as db:
-        movie: Movie = db.get(Movie, id)
+    try:
+        with Connection as db:
+            data: MovieDto = MovieDto(**request.dict())
 
-        if not movie:
-            raise ItemNotFoundException(
-                f"The movie with ID <{id}> does not exists"
-            )
+            updated: MovieDto = MovieService(
+                db=db
+            ).update_movie(movie_id=id, data=data)
 
-        movie.category = request.category
-        movie.overview = request.overview
-        movie.rating = request.rating
-        movie.title = request.title
-        movie.year = request.year
+            response = jsonable_encoder(updated)
 
-        db.add(movie)
-        db.commit()
-        db.refresh(movie)
-
-        response = jsonable_encoder(movie)
-
-        return JSONResponse(content=response)
+            return JSONResponse(content=response)
+    except ItemNotFoundException as ex:
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_FOUND,
+            detail=ex.args[0]
+        )
+    except Exception:
+        raise

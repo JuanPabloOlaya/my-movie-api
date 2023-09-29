@@ -1,8 +1,9 @@
+from typing import Optional
 from pydantic import BaseModel
 
 
 class MovieDto(BaseModel):
-    id: int
+    id: Optional[int]
     title: str
     overview: str
     year: str
