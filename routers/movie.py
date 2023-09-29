@@ -2,7 +2,6 @@ from http import HTTPStatus
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from sqlmodel import select
 from config.database import Connection
 from dtos.movie import MovieDto
 from exceptions.common import ItemAlreadyExistsException, ItemNotFoundException
@@ -11,7 +10,7 @@ from models.movie import Movie
 from requests.movie import CreateMovieRequest, UpdateMovieRequest
 from services.movie import MovieService
 
-movie_router = APIRouter()
+movie_router: APIRouter = APIRouter()
 
 
 @movie_router.post(

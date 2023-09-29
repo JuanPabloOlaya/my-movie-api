@@ -7,7 +7,7 @@ from requests.auth import LoginRequest
 from utils.jwt_manager import create_token
 
 
-auth_router = APIRouter()
+auth_router: APIRouter = APIRouter()
 
 
 @auth_router.post("/login", tags=["Auth"])
